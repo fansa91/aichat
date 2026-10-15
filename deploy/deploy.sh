@@ -134,6 +134,11 @@ echo "wrote $ENV_FILE"
 # ---- systemd 单元 ----
 UNIT_SRC="$SCRIPT_DIR/aichat-api.service"
 UNIT_DST="/etc/systemd/system/aichat-api.service"
+if [ ! -f "$UNIT_SRC" ]; then
+  echo "ERROR: 找不到 systemd 模板 $UNIT_SRC" >&2
+  echo "请把 release 资产（deploy.sh、aichat-api.service、Caddyfile）放在同一目录再运行" >&2
+  exit 1
+fi
 sed -e "s|@DIR@|$DIR|g" -e "s|@USER@|$RUN_USER|g" -e "s|@NODE@|$NODE|g" "$UNIT_SRC" > "$UNIT_DST"
 systemctl daemon-reload
 systemctl enable --now aichat-api.service
