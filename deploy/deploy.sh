@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # aichat 一键部署脚本（流程沿用 liuying）
 #
+# 最简用法（只需要 deploy.sh 这一个文件，service 模板自动从 release 拉取）：
+#   curl -fsSLO https://github.com/fansa91/aichat/releases/download/latest/deploy.sh
+#   chmod +x deploy.sh
 #   ./deploy.sh --download [--dir /opt/aichat] [--port 3002] [--user root]
 #               [--db-host 127.0.0.1] [--db-port 3306] [--db-user aichat]
 #               [--db-pass secret] [--db-name aichat] [--key-encryption-key <64hex>]
+# 本地包模式：
 #   ./deploy.sh --web-dist /path/aichat-web-dist.tar.gz --api-dist /path/aichat-api-dist.tar.gz [...]
-#
+#   （本地模式需要 aichat-api.service 模板放在 deploy.sh 同一目录）
 # 流程：解压 web/dist 与 api/dist → 写 api/.env（merge-only，不覆盖手工改动，0600）
 #       → 由模板生成 systemd 单元 → daemon-reload + enable + restart。
 # 注意：Caddy 不由本脚本改动，按 deploy/Caddyfile 手工接入。
@@ -60,8 +64,12 @@ if [ "$DOWNLOAD" -eq 1 ]; then
   echo "downloading from $base ..."
   curl -fsSL -o "$tmp/web.tar.gz" "$base/aichat-web-dist.tar.gz"
   curl -fsSL -o "$tmp/api.tar.gz" "$base/aichat-api-dist.tar.gz"
+  curl -fsSL -o "$tmp/aichat-api.service" "$base/aichat-api.service"
   WEB_DIST="$tmp/web.tar.gz"
   API_DIST="$tmp/api.tar.gz"
+  UNIT_SRC="$tmp/aichat-api.service"
+else
+  UNIT_SRC="$SCRIPT_DIR/aichat-api.service"
 fi
 [ -z "$WEB_DIST" ] || [ -z "$API_DIST" ] && usage
 [ -f "$WEB_DIST" ] || { echo "missing $WEB_DIST"; exit 1; }
@@ -132,11 +140,11 @@ chmod 600 "$ENV_FILE"
 echo "wrote $ENV_FILE"
 
 # ---- systemd 单元 ----
-UNIT_SRC="$SCRIPT_DIR/aichat-api.service"
+# UNIT_SRC 在 --download 模式下是刚从 release 拉的模板，否则是脚本同目录的模板
 UNIT_DST="/etc/systemd/system/aichat-api.service"
 if [ ! -f "$UNIT_SRC" ]; then
   echo "ERROR: 找不到 systemd 模板 $UNIT_SRC" >&2
-  echo "请把 release 资产（deploy.sh、aichat-api.service、Caddyfile）放在同一目录再运行" >&2
+  echo "本地模式请把 aichat-api.service 放在 deploy.sh 同一目录，或改用 --download 让脚本自动拉取" >&2
   exit 1
 fi
 sed -e "s|@DIR@|$DIR|g" -e "s|@USER@|$RUN_USER|g" -e "s|@NODE@|$NODE|g" "$UNIT_SRC" > "$UNIT_DST"
