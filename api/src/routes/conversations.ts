@@ -36,7 +36,10 @@ export async function conversationRoutes(app: FastifyInstance) {
 
   app.post("/", async (req, reply) => {
     const user = requireUser(req);
-    const body = (req.body ?? {}) as { title?: string; model_config_id?: string; request_mode?: string };
+    const body = (req.body ?? {}) as {
+      title?: string; model_config_id?: string; request_mode?: string;
+      provider?: string; model?: string;
+    };
     const requestMode = body.request_mode === "proxy" ? "proxy" : "direct";
     let modelConfigId: string | null = null;
     if (body.model_config_id) {
@@ -47,11 +50,15 @@ export async function conversationRoutes(app: FastifyInstance) {
       if (rows.length === 0) return badRequest(reply, "模型配置不存在");
       modelConfigId = body.model_config_id;
     }
+    const provider = ["openai", "anthropic", "gemini"].includes(body.provider ?? "")
+      ? (body.provider as string) : null;
+    const model = typeof body.model === "string" && body.model.trim()
+      ? body.model.trim().slice(0, 128) : null;
     const id = uuid();
     const title = (body.title ?? "").trim() || "新会话";
     await pool.query(
-      "INSERT INTO conversations (id, user_id, title, model_config_id, request_mode) VALUES (?, ?, ?, ?, ?)",
-      [id, user.id, title.slice(0, 200), modelConfigId, requestMode]
+      "INSERT INTO conversations (id, user_id, title, model_config_id, provider, model, request_mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, user.id, title.slice(0, 200), modelConfigId, provider, model, requestMode]
     );
     const [rows] = await pool.query<RowDataPacket[]>("SELECT *, 0 AS message_count FROM conversations WHERE id = ?", [id]);
     return reply.status(201).send(rows[0]);

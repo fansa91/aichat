@@ -5,19 +5,21 @@ import { Separator } from "./ui/misc";
 import { Badge } from "./ui/misc";
 import { useChat } from "../context/ChatContext";
 import { useAuth } from "../context/AuthContext";
-import { byok } from "../lib/byok";
+import { providerName } from "../lib/providers";
 
-export function SessionSidebar({ onOpenSettings }: { onOpenSettings: () => void }) {
-  const { conversations, activeId, selectConversation, newConversation, deleteConversation, renameConversation, activeConfig } = useChat();
+export function SessionSidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => void; onNavigate?: () => void }) {
+  const { conversations, activeId, selectConversation, newConversation, deleteConversation, renameConversation, activeModel, keyMissing } = useChat();
   const { user, logout } = useAuth();
   const [menuId, setMenuId] = React.useState<string | null>(null);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [editTitle, setEditTitle] = React.useState("");
 
+  const pick = (id: string) => { selectConversation(id); onNavigate?.(); };
+
   return (
     <div className="flex h-full w-64 flex-col border-r bg-card">
       <div className="p-3">
-        <Button className="w-full" onClick={() => newConversation()}>
+        <Button className="w-full" onClick={() => { newConversation(); onNavigate?.(); }}>
           <MessageSquarePlus /> 新对话
         </Button>
       </div>
@@ -25,7 +27,7 @@ export function SessionSidebar({ onOpenSettings }: { onOpenSettings: () => void 
         {conversations.map((c) => (
           <div key={c.id} className="relative">
             <button
-              onClick={() => selectConversation(c.id)}
+              onClick={() => pick(c.id)}
               className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-accent ${
                 c.id === activeId ? "bg-accent" : ""
               }`}
@@ -77,10 +79,12 @@ export function SessionSidebar({ onOpenSettings }: { onOpenSettings: () => void 
       </div>
       <div className="p-3">
         <Separator className="mb-3" />
-        {activeConfig && (
+        {activeModel && (
           <div className="mb-2 flex items-center gap-2 px-1">
-            <Badge variant="secondary" className="truncate">{activeConfig.name}</Badge>
-            {!byok.has(activeConfig.id) && <Badge variant="outline">未填 Key</Badge>}
+            <Badge variant="secondary" className="max-w-full truncate">
+              {providerName(activeModel.provider)} · {activeModel.model}
+            </Badge>
+            {keyMissing && <Badge variant="outline">未填 Key</Badge>}
           </div>
         )}
         <div className="flex items-center justify-between">

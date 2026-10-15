@@ -44,7 +44,7 @@ export const api = {
     req<{ items: Conversation[]; page: number; per_page: number; total: number }>(
       `/conversations?page=${page}&per_page=${perPage}`
     ),
-  createConversation: (body: { title?: string; model_config_id?: string; request_mode?: string }) =>
+  createConversation: (body: { title?: string; model_config_id?: string; request_mode?: string; provider?: string; model?: string }) =>
     req<Conversation>("/conversations", { method: "POST", body: JSON.stringify(body) }),
   getConversation: (id: string) => req<Conversation>(`/conversations/${id}`),
   patchConversation: (id: string, title: string) =>
@@ -71,7 +71,10 @@ export const api = {
   deleteKey: (id: string) => req(`/keys/${id}`, { method: "DELETE" }),
 
   /** 代理模式聊天：返回 SSE 响应，由调用方逐行解析（已归一化为 OpenAI 风格） */
-  chatProxy: (convId: string, content: string, contentType: string, modelApiKey?: string) =>
+  chatProxy: (
+    convId: string, content: string, contentType: string, modelApiKey?: string,
+    provider?: { api_format: string; base_url: string; model: string },
+  ) =>
     fetch(BASE + `/conversations/${convId}/chat`, {
       method: "POST",
       headers: {
@@ -79,6 +82,6 @@ export const api = {
         ...(localStorage.getItem("aichat_token") ? { authorization: `Bearer ${localStorage.getItem("aichat_token")}` } : {}),
         ...(modelApiKey ? { "x-model-api-key": modelApiKey } : {}),
       },
-      body: JSON.stringify({ content, content_type: contentType }),
+      body: JSON.stringify({ content, content_type: contentType, ...(provider ?? {}) }),
     }),
 };

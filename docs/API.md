@@ -101,9 +101,12 @@
 ### POST /api/conversations/:id/chat（需认证，SSE）
 **代理模式**用：`{ "content": "用户本轮输入", "content_type": "text|parts（可选）" }`，
 可选请求头 `X-Model-Api-Key: <key>`。
-Key 来源优先级：请求头（transient，用完即弃）＞ 该会话 `model_config` 关联的服务端加密 Key。
+可选 provider 直传参数：`{ "api_format": "openai|anthropic|gemini", "base_url": "…", "model": "…", "system_prompt?": "…" }`。
+三者齐全时跳过 `model_configs` 查表（LobeChat 风格 provider 配置）；缺省时回退旧逻辑
+（会话的 `model_config_id` → 默认配置）。
+Key 来源优先级：请求头（transient，用完即弃）＞ 按 `base_url` 匹配的服务端加密 Key。
 两者都没有 → `400 { error: "bad_request", message: "缺少 API Key" }`。
-后端按该会话模型配置的 `api_format` 把标准内容段翻译成对应上游线路格式（见 §8）。
+后端按 `api_format` 把标准内容段翻译成对应上游线路格式（见 §8）。
 
 - 成功：`Content-Type: text/event-stream`，后端把上游 SSE **归一化为 OpenAI 风格**后透传：
   `data: {"choices":[{"delta":{"content":"…"}}]}` … 结束时 `data: [DONE]`；

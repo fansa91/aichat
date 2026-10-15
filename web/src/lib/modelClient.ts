@@ -2,9 +2,18 @@
 // 规范与后端 src/providers/translate.ts 一致（见 docs/API.md §8），
 // Key 只出现在发往上游的请求头里，永不进自家后端、不进 URL。
 
-import type { ApiFormat, CanonicalPart, HistoryItem, ModelConfig } from "./types";
+import type { ApiFormat, CanonicalPart, HistoryItem } from "./types";
 
 export { type ApiFormat };
+
+/** 直连调用参数（provider 中心配置拼装，不再依赖服务端的 ModelConfig） */
+export interface DirectCallParams {
+  api_format: ApiFormat;
+  base_url: string;
+  model: string;
+  temperature?: number | null;
+  max_tokens?: number | null;
+}
 
 interface WireRequest { url: string; headers: Record<string, string>; body: unknown; }
 
@@ -36,7 +45,7 @@ function textOf(p: CanonicalPart): string {
 }
 
 export function buildDirectRequest(
-  cfg: ModelConfig, apiKey: string, systemPrompt: string,
+  cfg: DirectCallParams, apiKey: string, systemPrompt: string,
   history: HistoryItem[], stream: boolean
 ): WireRequest {
   const base = cfg.base_url.replace(/\/+$/, "");
@@ -54,7 +63,7 @@ export function buildDirectRequest(
       headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
       body: {
         model: cfg.model, stream, messages,
-        ...(cfg.temperature !== null ? { temperature: cfg.temperature } : {}),
+        ...(cfg.temperature ? { temperature: cfg.temperature } : {}),
         ...(cfg.max_tokens !== null ? { max_tokens: cfg.max_tokens } : {}),
         ...(stream ? { stream_options: { include_usage: true } } : {}),
       },
@@ -73,7 +82,7 @@ export function buildDirectRequest(
         model: cfg.model,
         max_tokens: cfg.max_tokens ?? 4096,
         ...(sysText ? { system: sysText } : {}),
-        ...(cfg.temperature !== null ? { temperature: cfg.temperature } : {}),
+        ...(cfg.temperature ? { temperature: cfg.temperature } : {}),
         messages: msgs.map((h) => ({ role: h.role, content: toWireParts("anthropic", h.parts) })),
         ...(stream ? { stream: true } : {}),
       },
@@ -91,8 +100,8 @@ export function buildDirectRequest(
         parts: toWireParts("gemini", h.parts),
       })),
       generationConfig: {
-        ...(cfg.temperature !== null ? { temperature: cfg.temperature } : {}),
-        ...(cfg.max_tokens !== null ? { maxOutputTokens: cfg.max_tokens } : {}),
+        ...(cfg.temperature ? { temperature: cfg.temperature } : {}),
+        ...(cfg.max_tokens ? { maxOutputTokens: cfg.max_tokens } : {}),
       },
     },
   };
@@ -140,7 +149,7 @@ export interface StreamEvents {
  * 返回 { text, usage } 汇总。
  */
 export async function streamDirect(
-  cfg: ModelConfig, apiKey: string, systemPrompt: string,
+  cfg: DirectCallParams, apiKey: string, systemPrompt: string,
   history: HistoryItem[], ev: StreamEvents
 ): Promise<{ text: string; input: number | null; output: number | null }> {
   const req = buildDirectRequest(cfg, apiKey, systemPrompt, history, true);
@@ -211,7 +220,7 @@ export async function streamDirect(
 
 /** 直连非流式补全（用于标题生成等） */
 export async function completeDirect(
-  cfg: ModelConfig, apiKey: string, systemPrompt: string, userText: string
+  cfg: DirectCallParams, apiKey: string, systemPrompt: string, userText: string
 ): Promise<string> {
   const req = buildDirectRequest(
     cfg, apiKey, systemPrompt, [{ role: "user", parts: [{ type: "text", text: userText }] }], false

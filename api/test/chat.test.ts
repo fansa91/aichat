@@ -271,3 +271,35 @@ test("代理转发：anthropic 线路归一化", async () => {
     await up.close();
   }
 });
+
+test("代理转发：provider 直传参数（无 model_config）", async () => {
+  const up = await startFakeUpstream("openai");
+  try {
+    const { token } = await registerUser(app, "chatuser_provider");
+    // 不创建 model_config，会话也不关联配置
+    const r = await app.inject({
+      method: "POST", url: "/api/conversations", headers: bearer(token),
+      payload: { provider: "openai", model: "gpt-4o", request_mode: "proxy" },
+    });
+    assert.equal(r.statusCode, 201);
+    const convId = r.json().id as string;
+
+    const res = await fetch(`${base}/api/conversations/${convId}/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "x-model-api-key": "sk-direct" },
+      body: JSON.stringify({
+        content: "你好",
+        api_format: "openai", base_url: up.url, model: "gpt-4o",
+      }),
+    });
+    assert.equal(res.status, 200);
+    const lines = await readSse(res);
+    assert.ok(lines.some((l) => l.includes('"content":"Hello"')), `缺 Hello 行: ${lines}`);
+
+    const chatReq = up.requests.find((r) => r.body?.stream === true)!;
+    assert.equal(chatReq.body.model, "gpt-4o");
+    assert.equal(chatReq.headers.authorization, "Bearer sk-direct");
+  } finally {
+    await up.close();
+  }
+});

@@ -136,7 +136,11 @@ export async function chatRoutes(app: FastifyInstance) {
     );
     if (crows.length === 0) return reply.status(404).send({ error: "not_found", message: "会话不存在" });
 
-    const body = (req.body ?? {}) as { content?: string; content_type?: string };
+    const body = (req.body ?? {}) as {
+      content?: string; content_type?: string;
+      // LobeChat 风格 provider 直传（新）：三者齐全时跳过 model_configs 查表
+      api_format?: string; base_url?: string; model?: string; system_prompt?: string;
+    };
     if (typeof body.content !== "string" || body.content.length === 0) {
       return badRequest(reply, "content 不能为空");
     }
@@ -149,9 +153,32 @@ export async function chatRoutes(app: FastifyInstance) {
       }
     }
 
-    const modelCfg = await getModelConfig(pool, user.id, conversationId);
-    if (!modelCfg) {
-      return reply.status(400).send({ error: "bad_request", message: "未选择模型配置" });
+    // 模型配置：优先用请求体直传的 provider 参数，否则回退旧的 model_configs 查表
+    let modelCfg: ModelCfg & { id: string | null };
+    let systemPrompt = "";
+    const direct = body.api_format && body.base_url && body.model
+      && ["openai", "anthropic", "gemini"].includes(body.api_format);
+    if (direct) {
+      modelCfg = {
+        id: null,
+        base_url: (body.base_url as string).replace(/\/+$/, ""),
+        model: body.model as string,
+        api_format: body.api_format as ApiFormat,
+        temperature: null,
+        max_tokens: null,
+      };
+      systemPrompt = typeof body.system_prompt === "string" ? body.system_prompt : "";
+    } else {
+      const legacy = await getModelConfig(pool, user.id, conversationId);
+      if (!legacy) {
+        return reply.status(400).send({ error: "bad_request", message: "未选择模型配置" });
+      }
+      modelCfg = legacy;
+      const [cfgRows] = await pool.query<RowDataPacket[]>(
+        "SELECT system_prompt FROM model_configs WHERE id = ?",
+        [modelCfg.id]
+      );
+      systemPrompt = (cfgRows[0]?.system_prompt as string) ?? "";
     }
 
     // Key：请求头 transient 优先，其次服务端加密 Key；全程不落库、不记日志
@@ -189,12 +216,8 @@ export async function chatRoutes(app: FastifyInstance) {
     const history = await loadHistory(pool, conversationId);
     let upstream: ReturnType<typeof buildUpstreamRequest>;
     try {
-      const [cfgRows] = await pool.query<RowDataPacket[]>(
-        "SELECT system_prompt FROM model_configs WHERE id = ?",
-        [modelCfg.id]
-      );
       upstream = buildUpstreamRequest(
-        modelCfg, apiKey, (cfgRows[0]?.system_prompt as string) ?? "", history, true
+        modelCfg, apiKey, systemPrompt, history, true
       );
     } catch (e: any) {
       return reply.status(400).send({ error: "bad_request", message: e.message });
