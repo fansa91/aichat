@@ -1,0 +1,15 @@
+[Unit]
+Description=aichat API server
+After=network.target
+
+[Service]
+Type=simple
+User=@USER@
+WorkingDirectory=@DIR@/api
+EnvironmentFile=-@DIR@/api/.env
+ExecStart=@NODE@ @DIR@/api/dist/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

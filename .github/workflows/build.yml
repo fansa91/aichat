@@ -1,0 +1,46 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build web
+        run: |
+          cd web
+          npm ci --no-audit --no-fund
+          npm run build
+          tar -czf ../aichat-web-dist.tar.gz -C dist .
+
+      - name: Build api
+        run: |
+          cd api
+          npm ci --no-audit --no-fund
+          npx tsc
+          npm prune --omit=dev
+          tar -czf ../aichat-api-dist.tar.gz dist migrations package.json node_modules
+
+      - name: Publish rolling latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: latest
+          prerelease: false
+          files: |
+            aichat-web-dist.tar.gz
+            aichat-api-dist.tar.gz
+            deploy/deploy.sh
+            deploy/aichat-api.service
+            deploy/Caddyfile

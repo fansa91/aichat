@@ -1,0 +1,15 @@
+# Caddy 配置模板（手工接入，不由 deploy.sh 自动改）
+# 将域名换成实际域名，root 指向 deploy.sh 的安装目录下的 web/dist
+
+aichat.example.com {
+	root * /opt/aichat/web/dist
+	file_server
+
+	# 前端单页应用：非文件路径回退到 index.html
+	try_files {path} /index.html
+
+	# 后端 API 反代
+	handle /api/* {
+		reverse_proxy 127.0.0.1:3002
+	}
+}
