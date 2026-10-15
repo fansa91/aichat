@@ -22,6 +22,13 @@ jobs:
           cd web
           npm ci --no-audit --no-fund
           npm run build
+          # 构建校验：Tailwind 工具类必须被编译进 CSS（防漏配 @tailwindcss/vite 插件）
+          CSS=$(ls dist/assets/*.css | head -1)
+          grep -q "@tailwind" "$CSS" && { echo "ERROR: uncompiled @tailwind directive in $CSS"; exit 1; }
+          for u in '\.flex{' '\.items-center' '\.rounded-md'; do
+            grep -q "$u" "$CSS" || { echo "ERROR: utility $u missing in $CSS"; exit 1; }
+          done
+          echo "web build OK: $CSS"
           tar -czf ../aichat-web-dist.tar.gz -C dist .
 
       - name: Build api
