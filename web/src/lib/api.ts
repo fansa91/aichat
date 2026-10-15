@@ -16,10 +16,11 @@ export class ApiError extends Error {
 
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem("aichat_token");
+  const hasBody = opts.body !== undefined && opts.body !== null;
   const res = await fetch(BASE + path, {
     ...opts,
     headers: {
-      "content-type": "application/json",
+      ...(hasBody ? { "content-type": "application/json" } : {}),
       ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...(opts.headers ?? {}),
     },
