@@ -1,17 +1,19 @@
 import * as React from "react";
 import {
-  Check, ChevronDown, Eye, EyeOff, KeyRound, Loader2, PlugZap,
+  Check, ChevronDown, Download, Eye, EyeOff, KeyRound, Loader2, PlugZap,
   Plus, Server, Settings2, Trash2, X,
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input, Label } from "../components/ui/input";
 import { Select } from "../components/ui/select";
+import { Dialog, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Badge, Separator, Switch } from "../components/ui/misc";
 import { api, ApiError } from "../lib/api";
 import {
-  PROVIDERS, checkConnection, hasKey, loadProviders, providerName, saveProviders,
+  BUILTINS, checkConnection, createCustomProvider, fetchAndMergeModels,
+  hasKey, loadProviders, providerName, saveProviders,
 } from "../lib/providers";
-import type { ActiveModel, ApiFormat, ProviderSettings, ProviderState } from "../lib/providers";
+import type { ProviderSettings, ProviderState } from "../lib/providers";
 import { useChat } from "../context/ChatContext";
 import type { ApiKeyMeta, RequestMode } from "../lib/types";
 
@@ -45,25 +47,37 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
   );
 }
 
-/** LobeChat 风格：供应商卡片列表 */
+/** LobeChat 风格：供应商卡片列表（内置 + 自定义） */
 function ProviderListTab() {
-  const { providers, refreshProviders, activeModel, selectModel } = useChat();
-  const [open, setOpen] = React.useState<ApiFormat | null>(null);
+  const { providers, refreshProviders, activeModel } = useChat();
+  const [open, setOpen] = React.useState<string | null>(null);
+  const [adding, setAdding] = React.useState(false);
 
-  const update = (id: ApiFormat, fn: (s: ProviderState) => void) => {
+  const update = (id: string, fn: (s: ProviderState) => void) => {
     const next = loadProviders();
     fn(next);
     saveProviders(next);
     refreshProviders();
   };
 
+  const list = Object.values(providers).sort((a, b) =>
+    Number(b.custom) - Number(a.custom) || 0
+  );
+  // 内置在前、自定义在后
+  const ordered = [
+    ...BUILTINS.map((b) => providers[b.id]).filter(Boolean),
+    ...list.filter((p) => p.custom),
+  ];
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         按供应商配置 Key 与模型。Key 只保存在本浏览器，不上传服务器。
+        自定义供应商需兼容 OpenAI 接口格式。
       </p>
-      {PROVIDERS.map((p) => {
+      {ordered.map((p) => {
         const s = providers[p.id];
+        if (!s) return null;
         const enabledCount = s.models.filter((m) => m.enabled).length;
         const expanded = open === p.id;
         return (
@@ -76,11 +90,12 @@ function ProviderListTab() {
               <button
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
                 onClick={() => setOpen(expanded ? null : p.id)}
-                aria-label={`${expanded ? "收起" : "展开"} ${p.name} 配置`}
+                aria-label={`${expanded ? "收起" : "展开"} ${s.name} 配置`}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium">{p.name}</span>
+                    <span className="font-medium">{s.name}</span>
+                    {s.custom && <Badge variant="outline">自定义</Badge>}
                     {hasKey(providers, p.id)
                       ? <Badge variant="secondary">已填 Key</Badge>
                       : <Badge variant="outline">未填 Key</Badge>}
@@ -92,6 +107,19 @@ function ProviderListTab() {
                 </div>
                 <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
               </button>
+              {s.custom && (
+                <Button
+                  variant="ghost" size="icon" title="删除该供应商"
+                  onClick={() => {
+                    if (confirm(`删除供应商「${s.name}」及其模型列表？`)) {
+                      update(p.id, (n) => { delete n[p.id]; });
+                      if (open === p.id) setOpen(null);
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
             </div>
             {expanded && (
               <ProviderDetail
@@ -103,25 +131,82 @@ function ProviderListTab() {
           </div>
         );
       })}
+      <Button variant="outline" className="w-full" onClick={() => setAdding(true)}>
+        <Plus className="h-4 w-4" /> 添加自定义供应商（OpenAI 兼容）
+      </Button>
+      {adding && (
+        <AddProviderDialog
+          onClose={() => setAdding(false)}
+          onAdded={() => { setAdding(false); refreshProviders(); }}
+        />
+      )}
       {activeModel && (
-        <ActiveModelRow activeModel={activeModel} onSelect={selectModel} />
+        <ActiveModelRow />
       )}
     </div>
   );
 }
 
+/** 添加自定义供应商对话框 */
+function AddProviderDialog({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const [name, setName] = React.useState("");
+  const [baseUrl, setBaseUrl] = React.useState("");
+  const [error, setError] = React.useState("");
+
+  const save = () => {
+    setError("");
+    if (!baseUrl.trim()) { setError("请填写 Base URL"); return; }
+    try {
+      new URL(baseUrl.trim());
+    } catch {
+      setError("Base URL 格式不正确");
+      return;
+    }
+    const all = loadProviders();
+    const p = createCustomProvider(name, baseUrl);
+    all[p.id] = p;
+    saveProviders(all);
+    onAdded();
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogHeader>
+        <DialogTitle>添加自定义供应商</DialogTitle>
+      </DialogHeader>
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          适用于 DeepSeek、OpenRouter、硅基流动等 OpenAI 兼容接口。
+          添加后在卡片里填写 Key，再点「获取模型列表」拉取可用模型。
+        </p>
+        <div className="space-y-2">
+          <Label>名称</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="如：DeepSeek" />
+        </div>
+        <div className="space-y-2">
+          <Label>Base URL</Label>
+          <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.deepseek.com/v1" />
+        </div>
+        {error && <div className="text-sm text-destructive">{error}</div>}
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>取消</Button>
+        <Button onClick={save}>添加</Button>
+      </DialogFooter>
+    </Dialog>
+  );
+}
+
 /** 当前默认模型快捷行 */
-function ActiveModelRow({ activeModel, onSelect }: {
-  activeModel: ActiveModel; onSelect: (m: ActiveModel) => void;
-}) {
-  const { providers } = useChat();
+function ActiveModelRow() {
+  const { providers, activeModel, selectModel } = useChat();
   const [picking, setPicking] = React.useState(false);
-  const list: ActiveModel[] = [];
-  for (const p of PROVIDERS) {
-    const s = providers[p.id];
-    if (!s.enabled) continue;
-    for (const m of s.models) if (m.enabled) list.push({ provider: p.id, model: m.id });
+  const list: { provider: string; model: string }[] = [];
+  for (const p of Object.values(providers)) {
+    if (!p.enabled) continue;
+    for (const m of p.models) if (m.enabled) list.push({ provider: p.id, model: m.id });
   }
+  if (!activeModel) return null;
   return (
     <div className="rounded-lg border p-3">
       <div className="mb-2 text-sm font-medium">默认模型</div>
@@ -131,9 +216,9 @@ function ActiveModelRow({ activeModel, onSelect }: {
             <button
               key={`${m.provider}/${m.model}`}
               className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent ${m.provider === activeModel.provider && m.model === activeModel.model ? "bg-accent font-medium" : ""}`}
-              onClick={() => { onSelect(m); setPicking(false); }}
+              onClick={() => { selectModel(m); setPicking(false); }}
             >
-              <span className="text-muted-foreground">{providerName(m.provider)}</span>
+              <span className="text-muted-foreground">{providerName(providers, m.provider)}</span>
               <span className="truncate">{m.model}</span>
               {m.provider === activeModel.provider && m.model === activeModel.model && <Check className="ml-auto h-4 w-4" />}
             </button>
@@ -142,7 +227,7 @@ function ActiveModelRow({ activeModel, onSelect }: {
         </div>
       ) : (
         <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setPicking(true)}>
-          <span className="text-muted-foreground">{providerName(activeModel.provider)}</span>
+          <span className="text-muted-foreground">{providerName(providers, activeModel.provider)}</span>
           <span className="truncate">{activeModel.model}</span>
           <ChevronDown className="ml-auto h-4 w-4" />
         </Button>
@@ -152,11 +237,12 @@ function ActiveModelRow({ activeModel, onSelect }: {
 }
 
 function ProviderDetail({ provider, initial, onChanged }: {
-  provider: ApiFormat; initial: ProviderSettings; onChanged: () => void;
+  provider: string; initial: ProviderSettings; onChanged: () => void;
 }) {
   const [s, setS] = React.useState(initial);
   const [showKey, setShowKey] = React.useState(false);
   const [checking, setChecking] = React.useState(false);
+  const [fetching, setFetching] = React.useState(false);
   const [checkMsg, setCheckMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
   const [newModel, setNewModel] = React.useState("");
 
@@ -172,11 +258,30 @@ function ProviderDetail({ provider, initial, onChanged }: {
   const doCheck = async () => {
     if (!s.apiKey.trim()) { setCheckMsg({ ok: false, text: "请先填写 API Key" }); return; }
     setChecking(true); setCheckMsg(null);
-    const r = await checkConnection(provider, s.baseUrl, s.apiKey);
+    const r = await checkConnection(s);
     setChecking(false);
     setCheckMsg(r.ok
       ? { ok: true, text: `连接成功${r.models?.length ? `，上游返回 ${r.models.length} 个模型` : ""}` }
       : { ok: false, text: `连接失败：${r.error}` });
+  };
+
+  const doFetch = async () => {
+    if (!s.apiKey.trim()) { setCheckMsg({ ok: false, text: "请先填写 API Key" }); return; }
+    setFetching(true); setCheckMsg(null);
+    const all = loadProviders();
+    const { state, result } = await fetchAndMergeModels(all, provider);
+    setFetching(false);
+    if (!result.ok) {
+      setCheckMsg({ ok: false, text: `拉取失败：${result.error}` });
+      return;
+    }
+    saveProviders(state);
+    setS(state[provider]);
+    onChanged();
+    setCheckMsg({
+      ok: true,
+      text: `获取到 ${result.fetched} 个模型${result.added ? `，新增 ${result.added} 个` : "，无新增"}`,
+    });
   };
 
   const addModel = () => {
@@ -222,10 +327,14 @@ function ProviderDetail({ provider, initial, onChanged }: {
           />
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <Button variant="outline" size="sm" onClick={doCheck} disabled={checking}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="outline" size="sm" onClick={doCheck} disabled={checking || fetching}>
           {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
           检查连接
+        </Button>
+        <Button variant="outline" size="sm" onClick={doFetch} disabled={checking || fetching} title="从上游 /models 拉取并合并到模型列表">
+          {fetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          获取模型列表
         </Button>
         {checkMsg && (
           <span className={`text-sm ${checkMsg.ok ? "text-green-600" : "text-destructive"}`}>{checkMsg.text}</span>

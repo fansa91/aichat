@@ -5,6 +5,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 vi.mock("../../context/ChatContext", () => {
   const providers = {
     openai: {
+      id: "openai", name: "OpenAI", apiFormat: "openai", custom: false,
       enabled: true, apiKey: "sk-test", baseUrl: "https://api.openai.com/v1",
       requestMode: "direct",
       models: [
@@ -12,8 +13,8 @@ vi.mock("../../context/ChatContext", () => {
         { id: "my-model", enabled: false, custom: true },
       ],
     },
-    anthropic: { enabled: false, apiKey: "", baseUrl: "https://api.anthropic.com", requestMode: "direct", models: [] },
-    gemini: { enabled: false, apiKey: "", baseUrl: "https://x", requestMode: "direct", models: [] },
+    anthropic: { id: "anthropic", name: "Anthropic", apiFormat: "anthropic", custom: false, enabled: false, apiKey: "", baseUrl: "https://api.anthropic.com", requestMode: "direct", models: [] },
+    gemini: { id: "gemini", name: "Google", apiFormat: "gemini", custom: false, enabled: false, apiKey: "", baseUrl: "https://x", requestMode: "direct", models: [] },
   };
   return {
     useChat: () => ({

@@ -4,9 +4,9 @@ import { completeDirect, streamDirect, streamProxied } from "../lib/modelClient"
 import type { DirectCallParams } from "../lib/modelClient";
 import {
   loadProviders, enabledModels, hasKey,
-  loadActiveModel, saveActiveModel, providerName,
+  loadActiveModel, saveActiveModel, providerName, providerFormat,
 } from "../lib/providers";
-import type { ActiveModel, ApiFormat, ProviderState } from "../lib/providers";
+import type { ActiveModel, ProviderState } from "../lib/providers";
 import type {
   CanonicalPart, Conversation, HistoryItem, Message, RequestMode,
 } from "../lib/types";
@@ -95,7 +95,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [refreshProviders, refreshConversations]);
 
   const activeRequestMode: RequestMode = activeModel
-    ? providers[activeModel.provider].requestMode
+    ? providers[activeModel.provider]?.requestMode ?? "direct"
     : "direct";
   const keyMissing = !!activeModel && !hasKey(providers, activeModel.provider);
 
@@ -123,9 +123,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const newConversation = React.useCallback(async () => {
     const m = activeModelRef.current;
-    const c = await api.createConversation(m ? {
-      provider: m.provider, model: m.model,
-      request_mode: providersRef.current[m.provider].requestMode,
+    const ps = providersRef.current;
+    const c = await api.createConversation(m && ps[m.provider] ? {
+      provider: providerFormat(ps, m.provider), model: m.model,
+      request_mode: ps[m.provider].requestMode,
     } : {});
     await refreshConversations();
     selectConversation(c.id);
@@ -156,11 +157,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     const ps = providersRef.current;
     if (!m || !activeId) return;
     const p = ps[m.provider];
+    if (!p) throw new Error("供应商配置不存在，请重新选择模型");
     const key = p.apiKey;
-    if (!hasKey(ps, m.provider)) throw new Error(`请先在设置中为 ${providerName(m.provider)} 填写 API Key`);
+    if (!hasKey(ps, m.provider)) throw new Error(`请先在设置中为 ${providerName(ps, m.provider)} 填写 API Key`);
 
     const params: DirectCallParams = {
-      api_format: m.provider as ApiFormat,
+      api_format: providerFormat(ps, m.provider),
       base_url: p.baseUrl,
       model: m.model,
     };
@@ -192,7 +194,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     try {
       if (p.requestMode === "proxy") {
         const res = await api.chatProxy(activeId, content, isParts ? "parts" : "text", key, {
-          api_format: m.provider, base_url: p.baseUrl, model: m.model,
+          api_format: providerFormat(ps, m.provider), base_url: p.baseUrl, model: m.model,
         });
         await streamProxied(res, {
           signal: controller.signal,

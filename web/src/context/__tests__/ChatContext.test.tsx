@@ -19,17 +19,20 @@ import type { ProviderState } from "../../lib/providers";
 
 const providerState = (): ProviderState => ({
   openai: {
+    id: "openai", name: "OpenAI", apiFormat: "openai", custom: false,
     enabled: true, apiKey: "sk-test-key", baseUrl: "https://api.openai.com/v1",
-    requestMode: "proxy" as const,
+    requestMode: "proxy",
     models: [{ id: "gpt-4o", enabled: true, custom: false }],
   },
   anthropic: {
+    id: "anthropic", name: "Anthropic", apiFormat: "anthropic", custom: false,
     enabled: false, apiKey: "", baseUrl: "https://api.anthropic.com",
-    requestMode: "direct" as const, models: [],
+    requestMode: "direct", models: [],
   },
   gemini: {
+    id: "gemini", name: "Google", apiFormat: "gemini", custom: false,
     enabled: false, apiKey: "", baseUrl: "https://generativelanguage.googleapis.com",
-    requestMode: "direct" as const, models: [],
+    requestMode: "direct", models: [],
   },
 });
 
@@ -42,6 +45,7 @@ vi.mock("../../lib/providers", () => ({
     )
   ),
   hasKey: vi.fn((s: any, p: string) => (s[p].apiKey?.length ?? 0) >= 8),
+  providerFormat: vi.fn((s: any, p: string) => s[p]?.apiFormat ?? "openai"),
   loadActiveModel: vi.fn(),
   saveActiveModel: vi.fn(),
   providerName: vi.fn((p: string) => p),

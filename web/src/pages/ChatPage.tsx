@@ -5,13 +5,13 @@ import { MessageList } from "../components/MessageList";
 import { ChatInput } from "../components/ChatInput";
 import { SettingsPage } from "./SettingsPage";
 import { useChat } from "../context/ChatContext";
-import { PROVIDERS, providerName } from "../lib/providers";
+import { providerName } from "../lib/providers";
 import type { ActiveModel } from "../lib/providers";
 
 export function ChatPage() {
   const {
     activeId, messages, hasMore, loadingMsgs, streaming,
-    activeModel, selectModel, keyMissing,
+    activeModel, selectModel, providers, keyMissing,
     loadMore, send, stop,
   } = useChat();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
@@ -73,7 +73,7 @@ export function ChatPage() {
         )}
         {keyMissing && activeId && activeModel && (
           <div className="border-t px-4 py-2 text-sm text-muted-foreground">
-            {providerName(activeModel.provider)} 未填写 API Key，
+            {providerName(providers, activeModel.provider)} 未填写 API Key，
             <button className="text-primary hover:underline" onClick={() => setSettingsOpen(true)}>去设置</button>
           </div>
         )}
@@ -105,12 +105,11 @@ function ModelSelector({ activeModel, onSelect, onOpenSettings }: {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const groups = PROVIDERS
+  const groups = Object.values(providers)
+    .filter((p) => p.enabled)
     .map((p) => ({
       meta: p,
-      models: providers[p.id].enabled
-        ? providers[p.id].models.filter((m) => m.enabled).map((m) => ({ provider: p.id as ActiveModel["provider"], model: m.id }))
-        : [],
+      models: p.models.filter((m) => m.enabled).map((m) => ({ provider: p.id, model: m.id })),
     }))
     .filter((g) => g.models.length > 0);
 
@@ -122,7 +121,7 @@ function ModelSelector({ activeModel, onSelect, onOpenSettings }: {
       >
         {activeModel ? (
           <>
-            <span className="shrink-0 text-muted-foreground">{providerName(activeModel.provider)}</span>
+            <span className="shrink-0 text-muted-foreground">{providerName(providers, activeModel.provider)}</span>
             <span className="truncate">{activeModel.model}</span>
           </>
         ) : (

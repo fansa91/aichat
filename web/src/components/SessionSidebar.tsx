@@ -8,7 +8,7 @@ import { useAuth } from "../context/AuthContext";
 import { providerName } from "../lib/providers";
 
 export function SessionSidebar({ onOpenSettings, onNavigate }: { onOpenSettings: () => void; onNavigate?: () => void }) {
-  const { conversations, activeId, selectConversation, newConversation, deleteConversation, renameConversation, activeModel, keyMissing } = useChat();
+  const { conversations, activeId, selectConversation, newConversation, deleteConversation, renameConversation, activeModel, providers, keyMissing } = useChat();
   const { user, logout } = useAuth();
   const [menuId, setMenuId] = React.useState<string | null>(null);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -82,7 +82,7 @@ export function SessionSidebar({ onOpenSettings, onNavigate }: { onOpenSettings:
         {activeModel && (
           <div className="mb-2 flex items-center gap-2 px-1">
             <Badge variant="secondary" className="max-w-full truncate">
-              {providerName(activeModel.provider)} · {activeModel.model}
+              {providerName(providers, activeModel.provider)} · {activeModel.model}
             </Badge>
             {keyMissing && <Badge variant="outline">未填 Key</Badge>}
           </div>
