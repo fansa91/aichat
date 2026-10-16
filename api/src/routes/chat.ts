@@ -140,6 +140,8 @@ export async function chatRoutes(app: FastifyInstance) {
       content?: string; content_type?: string;
       // LobeChat 风格 provider 直传（新）：三者齐全时跳过 model_configs 查表
       api_format?: string; base_url?: string; model?: string; system_prompt?: string;
+      // 编辑重发：为 true 时跳过用户消息落库（用户消息已存在）
+      resend?: boolean;
     };
     if (typeof body.content !== "string" || body.content.length === 0) {
       return badRequest(reply, "content 不能为空");
