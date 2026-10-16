@@ -9,8 +9,9 @@ import { Select } from "../components/ui/select";
 import { Dialog, DialogFooter, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { Badge, Separator, Switch } from "../components/ui/misc";
 import { api, ApiError } from "../lib/api";
+import { ModelFetchDialog } from "../components/ModelFetchDialog";
 import {
-  BUILTINS, checkConnection, createCustomProvider, fetchAndMergeModels,
+  BUILTINS, checkConnection, createCustomProvider, fetchModelIds, mergeSelectedModels,
   hasKey, loadProviders, providerName, saveProviders,
 } from "../lib/providers";
 import type { ProviderSettings, ProviderState } from "../lib/providers";
@@ -243,6 +244,7 @@ function ProviderDetail({ provider, initial, onChanged }: {
   const [showKey, setShowKey] = React.useState(false);
   const [checking, setChecking] = React.useState(false);
   const [fetching, setFetching] = React.useState(false);
+  const [fetchedModels, setFetchedModels] = React.useState<string[] | null>(null);
   const [checkMsg, setCheckMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
   const [newModel, setNewModel] = React.useState("");
 
@@ -268,19 +270,29 @@ function ProviderDetail({ provider, initial, onChanged }: {
   const doFetch = async () => {
     if (!s.apiKey.trim()) { setCheckMsg({ ok: false, text: "请先填写 API Key" }); return; }
     setFetching(true); setCheckMsg(null);
-    const all = loadProviders();
-    const { state, result } = await fetchAndMergeModels(all, provider);
+    const r = await fetchModelIds(loadProviders(), provider);
     setFetching(false);
-    if (!result.ok) {
-      setCheckMsg({ ok: false, text: `拉取失败：${result.error}` });
+    if (!r.ok) {
+      setCheckMsg({ ok: false, text: `拉取失败：${r.error}` });
       return;
     }
+    if (r.models.length === 0) {
+      setCheckMsg({ ok: false, text: "上游返回 0 个模型" });
+      return;
+    }
+    // 弹出选择面板，由用户勾选需要添加的模型
+    setFetchedModels(r.models);
+  };
+
+  const confirmFetch = (selected: string[]) => {
+    const { state, added } = mergeSelectedModels(loadProviders(), provider, selected);
     saveProviders(state);
     setS(state[provider]);
     onChanged();
+    setFetchedModels(null);
     setCheckMsg({
       ok: true,
-      text: `获取到 ${result.fetched} 个模型${result.added ? `，新增 ${result.added} 个` : "，无新增"}`,
+      text: added > 0 ? `已添加 ${added} 个模型` : "所选模型均已存在，无新增",
     });
   };
 
@@ -377,6 +389,14 @@ function ProviderDetail({ provider, initial, onChanged }: {
           <Button variant="outline" size="sm" onClick={addModel}><Plus className="h-4 w-4" /> 添加</Button>
         </div>
       </div>
+      {fetchedModels && (
+        <ModelFetchDialog
+          models={fetchedModels}
+          existing={new Set(s.models.map((m) => m.id))}
+          onClose={() => setFetchedModels(null)}
+          onConfirm={confirmFetch}
+        />
+      )}
     </div>
   );
 }

@@ -214,7 +214,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const res = await api.chatProxy(
           activeId, content, isParts ? "parts" : "text", key,
           { api_format: providerFormat(ps, m.provider), base_url: p.baseUrl, model: m.model },
-          controller.signal,
+          controller.signal, resend,
         );
         await streamProxied(res, {
           signal: controller.signal,

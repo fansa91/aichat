@@ -81,7 +81,7 @@ export const api = {
   chatProxy: (
     convId: string, content: string, contentType: string, modelApiKey?: string,
     provider?: { api_format: string; base_url: string; model: string },
-    signal?: AbortSignal,
+    signal?: AbortSignal, resend?: boolean,
   ) =>
     fetch(BASE + `/conversations/${convId}/chat`, {
       method: "POST",
@@ -90,7 +90,7 @@ export const api = {
         ...(localStorage.getItem("aichat_token") ? { authorization: `Bearer ${localStorage.getItem("aichat_token")}` } : {}),
         ...(modelApiKey ? { "x-model-api-key": modelApiKey } : {}),
       },
-      body: JSON.stringify({ content, content_type: contentType, ...(provider ?? {}) }),
+      body: JSON.stringify({ content, content_type: contentType, ...(provider ?? {}), ...(resend ? { resend: true } : {}) }),
       signal,
     }),
 

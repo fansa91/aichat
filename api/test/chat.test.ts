@@ -303,3 +303,40 @@ test("代理转发：provider 直传参数（无 model_config）", async () => {
     await up.close();
   }
 });
+
+test("代理转发：resend=true 时不重复插入用户消息", async () => {
+  const up = await startFakeUpstream("openai");
+  try {
+    const { token } = await registerUser(app, "chatuser_resend");
+    const convId = await makeConv(token, null);
+    // 先手动写入一条用户消息（模拟编辑后的状态）
+    await app.inject({
+      method: "POST", url: `/api/conversations/${convId}/messages`, headers: bearer(token),
+      payload: { role: "user", content: "编辑后的问题" },
+    });
+    const res = await fetch(`${base}/api/conversations/${convId}/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}`, "x-model-api-key": "sk-transient" },
+      body: JSON.stringify({
+        content: "编辑后的问题", api_format: "openai", base_url: up.url, model: "gpt-4o", resend: true,
+      }),
+    });
+    assert.equal(res.status, 200);
+    await readSse(res);
+    const settled = await pollFor(async () => {
+      const [m] = await app.pool.query<RowDataPacket[]>(
+        "SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?",
+        [convId]
+      );
+      return m[0].n === 2;
+    });
+    assert.ok(settled, "应只有 2 条消息（用户 1 条不重复 + 助手 1 条）");
+    const [all] = await app.pool.query<RowDataPacket[]>(
+      "SELECT role FROM messages WHERE conversation_id = ? ORDER BY id",
+      [convId]
+    );
+    assert.deepEqual(all.map((r: any) => r.role), ["user", "assistant"]);
+  } finally {
+    await up.close();
+  }
+});

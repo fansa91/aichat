@@ -87,7 +87,9 @@
 }
 .markdown-body pre code { background: transparent; padding: 0; }
 .markdown-body blockquote { border-left: 3px solid var(--color-border); padding-left: 0.75em; color: var(--color-muted-foreground); margin: 0.5em 0; }
-.markdown-body table { border-collapse: collapse; margin: 0.75em 0; width: 100%; font-size: 0.9em; }
+.markdown-body table { border-collapse: collapse; margin: 0.75em 0; font-size: 0.9em; }
+.markdown-body .table-wrap { overflow-x: auto; max-width: 100%; margin: 0.75em 0; }
+.markdown-body .table-wrap table { margin: 0; width: max-content; min-width: 100%; }
 .markdown-body th, .markdown-body td { border: 1px solid var(--color-border); padding: 0.4em 0.75em; text-align: left; }
 .markdown-body a { color: var(--color-primary); text-decoration: underline; }
 .markdown-body img { max-width: 100%; border-radius: 0.5rem; }

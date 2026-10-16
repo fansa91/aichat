@@ -132,7 +132,7 @@ describe("ChatContext", () => {
     expect(api.chatProxy).toHaveBeenCalledWith(
       "conv1", "你好", "text", "sk-test-key",
       { api_format: "openai", base_url: "https://api.openai.com/v1", model: "gpt-4o" },
-      expect.any(AbortSignal),
+      expect.any(AbortSignal), false,
     );
     expect(streamProxied).toHaveBeenCalled();
     // 流结束后用服务端状态刷新

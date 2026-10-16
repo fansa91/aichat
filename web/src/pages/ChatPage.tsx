@@ -39,7 +39,7 @@ export function ChatPage() {
   };
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen overflow-x-hidden bg-background">
       {/* 桌面端侧栏 */}
       <div className="hidden md:block">
         <SessionSidebar onOpenSettings={() => setSettingsOpen(true)} />

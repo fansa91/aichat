@@ -196,21 +196,26 @@ export async function chatRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: "bad_request", message: "缺少 API Key" });
     }
 
-    // 先落库用户消息
-    const conn = await pool.getConnection();
-    try {
-      await conn.beginTransaction();
-      await conn.query(
-        "INSERT INTO messages (conversation_id, role, content_type, content) VALUES (?, 'user', ?, ?)",
-        [conversationId, contentType, body.content]
-      );
-      await conn.query("UPDATE conversations SET updated_at = NOW() WHERE id = ?", [conversationId]);
-      await conn.commit();
-    } catch (e) {
-      try { await conn.rollback(); } catch { /* 连接已断则忽略，保证抛出原始错误 */ }
-      throw e;
-    } finally {
-      conn.release();
+    // 先落库用户消息（编辑重发时用户消息已存在，跳过插入避免重复）
+    const isResend = body.resend === true;
+    if (!isResend) {
+      const conn = await pool.getConnection();
+      try {
+        await conn.beginTransaction();
+        await conn.query(
+          "INSERT INTO messages (conversation_id, role, content_type, content) VALUES (?, 'user', ?, ?)",
+          [conversationId, contentType, body.content]
+        );
+        await conn.query("UPDATE conversations SET updated_at = NOW() WHERE id = ?", [conversationId]);
+        await conn.commit();
+      } catch (e) {
+        try { await conn.rollback(); } catch { /* 连接已断则忽略，保证抛出原始错误 */ }
+        throw e;
+      } finally {
+        conn.release();
+      }
+    } else {
+      await pool.query("UPDATE conversations SET updated_at = NOW() WHERE id = ?", [conversationId]);
     }
 
     const history = await loadHistory(pool, conversationId);

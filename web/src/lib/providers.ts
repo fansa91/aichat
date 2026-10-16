@@ -250,6 +250,36 @@ async function listModelsSmart(p: ProviderSettings): Promise<string[]> {
   return listModels(p.apiFormat, p.baseUrl, p.apiKey.trim());
 }
 
+/** 仅拉取上游模型 ID 列表（不合并），供弹出式选择面板使用 */
+export async function fetchModelIds(
+  s: ProviderState, providerId: string
+): Promise<{ ok: true; models: string[] } | { ok: false; error: string }> {
+  const p = s[providerId];
+  if (!p) return { ok: false, error: "供应商不存在" };
+  try {
+    const models = await listModelsSmart(p);
+    return { ok: true, models };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "拉取失败" };
+  }
+}
+
+/**
+ * 将选中的模型合并到供应商配置：
+ * 新模型追加为启用状态，已有模型保留原有的启用/禁用与自定义标记。
+ */
+export function mergeSelectedModels(
+  s: ProviderState, providerId: string, selected: string[]
+): { state: ProviderState; added: number } {
+  const p = s[providerId];
+  if (!p) return { state: s, added: 0 };
+  const have = new Set(p.models.map((m) => m.id));
+  const fresh = selected.filter((id) => !have.has(id)).map((id) => ({ id, enabled: true, custom: false }));
+  if (fresh.length === 0) return { state: s, added: 0 };
+  const state = { ...s, [providerId]: { ...p, models: [...p.models, ...fresh] } };
+  return { state, added: fresh.length };
+}
+
 /**
  * LobeChat 方式拉取模型列表并合并：
  * 新模型追加为启用状态，已有模型保留原有的启用/禁用与自定义标记。

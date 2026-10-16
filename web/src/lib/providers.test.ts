@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   loadProviders, saveProviders, enabledModels, providerName, providerFormat, hasKey,
-  loadActiveModel, saveActiveModel, createCustomProvider, fetchAndMergeModels, BUILTINS,
+  loadActiveModel, saveActiveModel, createCustomProvider, fetchAndMergeModels, fetchModelIds,
+  mergeSelectedModels, BUILTINS,
 } from "./providers";
 import * as modelClient from "./modelClient";
 
@@ -111,6 +112,30 @@ describe("providers", () => {
     expect(result.error).toBe("nope");
     expect(state).toBe(s);
     vi.restoreAllMocks();
+  });
+
+  it("fetchModelIds 只拉取不合并", async () => {
+    vi.spyOn(modelClient, "listModels").mockResolvedValue(["a", "b"]);
+    const s = loadProviders();
+    const before = s.openai.models.length;
+    const r = await fetchModelIds(s, "openai");
+    expect(r).toEqual({ ok: true, models: ["a", "b"] });
+    // 原 state 不变
+    expect(s.openai.models).toHaveLength(before);
+    vi.restoreAllMocks();
+  });
+
+  it("mergeSelectedModels 只合并选中且去重", async () => {
+    const s = loadProviders();
+    s.openai.models = [
+      { id: "gpt-4o", enabled: false, custom: false },
+      { id: "my-local", enabled: true, custom: true },
+    ];
+    const { state, added } = mergeSelectedModels(s, "openai", ["gpt-4o", "new-model"]);
+    expect(added).toBe(1);
+    expect(state.openai.models).toHaveLength(3);
+    expect(state.openai.models.find((m) => m.id === "gpt-4o")?.enabled).toBe(false);
+    expect(state.openai.models.find((m) => m.id === "new-model")?.enabled).toBe(true);
   });
 
   it("fetchAndMergeModels 代理模式走后端中转", async () => {

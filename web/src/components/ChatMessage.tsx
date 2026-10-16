@@ -100,7 +100,15 @@ export const ChatMessage = React.memo(function ChatMessage({
             <UserParts message={message} />
           ) : message.content ? (
             <div className="markdown-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeHighlight]}
+                components={{
+                  table: ({ children }) => (
+                    <div className="table-wrap"><table>{children}</table></div>
+                  ),
+                }}
+              >
                 {message.content}
               </ReactMarkdown>
             </div>
