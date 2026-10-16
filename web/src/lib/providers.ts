@@ -6,6 +6,7 @@
 
 import type { ApiFormat, RequestMode } from "./types";
 import { listModels } from "./modelClient";
+import { api, ApiError } from "./api";
 
 export type { ApiFormat };
 
@@ -236,10 +237,22 @@ export interface FetchResult {
   error?: string;
 }
 
+/** 拉取上游模型列表：代理模式走后端中转（绕开浏览器 CORS），直连模式浏览器直调 */
+async function listModelsSmart(p: ProviderSettings): Promise<string[]> {
+  if (p.requestMode === "proxy") {
+    try {
+      const r = await api.providerModels(p.apiFormat, p.baseUrl, p.apiKey.trim() || undefined);
+      return r.models;
+    } catch (e) {
+      throw new Error(e instanceof ApiError ? e.message : "拉取失败");
+    }
+  }
+  return listModels(p.apiFormat, p.baseUrl, p.apiKey.trim());
+}
+
 /**
  * LobeChat 方式拉取模型列表并合并：
- * 用 Key 直调上游 /models（不经过本服务器），新模型追加为启用状态，
- * 已有模型保留原有的启用/禁用与自定义标记。
+ * 新模型追加为启用状态，已有模型保留原有的启用/禁用与自定义标记。
  */
 export async function fetchAndMergeModels(
   s: ProviderState, providerId: string
@@ -248,7 +261,7 @@ export async function fetchAndMergeModels(
   if (!p) return { state: s, result: { ok: false, error: "供应商不存在" } };
   let models: string[];
   try {
-    models = await listModels(p.apiFormat, p.baseUrl, p.apiKey.trim());
+    models = await listModelsSmart(p);
   } catch (e) {
     return { state: s, result: { ok: false, error: e instanceof Error ? e.message : "拉取失败" } };
   }
@@ -271,12 +284,12 @@ export interface CheckResult {
   error?: string;
 }
 
-/** 检查连接：用填写的 Key/BaseURL 拉取上游模型列表（直调上游，不经过本服务器） */
+/** 检查连接：拉取上游模型列表（代理模式走后端中转，直连模式浏览器直调） */
 export async function checkConnection(
   p: ProviderSettings
 ): Promise<CheckResult> {
   try {
-    const models = await listModels(p.apiFormat, p.baseUrl, p.apiKey.trim());
+    const models = await listModelsSmart(p);
     return { ok: true, models };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "连接失败" };

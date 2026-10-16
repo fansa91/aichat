@@ -342,6 +342,9 @@ function ProviderDetail({ provider, initial, onChanged }: {
       </div>
       <div className="space-y-2">
         <Label>模型列表</Label>
+        <p className="text-xs text-muted-foreground">
+          代理模式下经服务器中转拉取（可绕开浏览器跨域限制）；直连模式由浏览器直接请求上游。
+        </p>
         <div className="space-y-1">
           {s.models.map((m) => (
             <div key={m.id} className="flex items-center gap-2 rounded border px-2 py-1.5">

@@ -113,6 +113,22 @@ describe("providers", () => {
     vi.restoreAllMocks();
   });
 
+  it("fetchAndMergeModels 代理模式走后端中转", async () => {
+    const listSpy = vi.spyOn(modelClient, "listModels");
+    const { api } = await import("./api");
+    const apiSpy = vi.spyOn(api, "providerModels").mockResolvedValue({ models: ["p1", "p2"] });
+    const s = loadProviders();
+    s.openai.requestMode = "proxy";
+    s.openai.apiKey = "sk-proxy-key";
+    const { state, result } = await fetchAndMergeModels(s, "openai");
+    expect(result.ok).toBe(true);
+    expect(result.fetched).toBe(2);
+    expect(listSpy).not.toHaveBeenCalled();
+    expect(apiSpy).toHaveBeenCalledWith("openai", s.openai.baseUrl, "sk-proxy-key");
+    expect(state.openai.models.some((m) => m.id === "p1")).toBe(true);
+    vi.restoreAllMocks();
+  });
+
   it("loadActiveModel / saveActiveModel", () => {
     const s = loadProviders();
     expect(loadActiveModel(s)).toEqual({ provider: "openai", model: s.openai.models[0].id });

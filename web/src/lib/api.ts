@@ -84,4 +84,12 @@ export const api = {
       },
       body: JSON.stringify({ content, content_type: contentType, ...(provider ?? {}) }),
     }),
+
+  /** 模型列表中转（后端直调上游，绕开浏览器 CORS 限制） */
+  providerModels: (apiFormat: string, baseUrl: string, modelApiKey?: string) =>
+    req<{ models: string[] }>("/providers/models", {
+      method: "POST",
+      headers: modelApiKey ? { "x-model-api-key": modelApiKey } : {},
+      body: JSON.stringify({ api_format: apiFormat, base_url: baseUrl }),
+    }),
 };

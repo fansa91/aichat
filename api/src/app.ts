@@ -9,6 +9,7 @@ import { messageRoutes } from "./routes/messages.js";
 import { modelConfigRoutes } from "./routes/modelConfigs.js";
 import { keyRoutes } from "./routes/keys.js";
 import { chatRoutes } from "./routes/chat.js";
+import { providersRoutes } from "./routes/providers.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -49,6 +50,7 @@ export async function buildApp(cfg: AppConfig): Promise<FastifyInstance> {
   await app.register(modelConfigRoutes, { prefix: "/api/model-configs" });
   await app.register(keyRoutes, { prefix: "/api/keys" });
   await app.register(chatRoutes, { prefix: "/api" });
+  await app.register(providersRoutes, { prefix: "/api" });
 
   app.addHook("onClose", async () => {
     await pool.end();
