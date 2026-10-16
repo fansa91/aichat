@@ -36,6 +36,7 @@ export interface Message {
   role: Role;
   content_type: ContentType;
   content: string;
+  model?: string | null;
   tokens_in: number | null;
   tokens_out: number | null;
   created_at: string;

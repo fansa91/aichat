@@ -209,6 +209,7 @@ export async function streamDirect(
   };
 
   for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+    if (ev.signal?.aborted) break;
     buf += decoder.decode(chunk, { stream: true });
     const lines = buf.split("\n");
     buf = lines.pop() ?? "";

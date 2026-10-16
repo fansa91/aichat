@@ -10,6 +10,7 @@ vi.mock("../../lib/api", () => ({
     deleteConversation: vi.fn(),
     patchConversation: vi.fn(),
     postMessage: vi.fn(),
+    patchMessage: vi.fn(),
     chatProxy: vi.fn(),
   },
   ApiError: class ApiError extends Error {},
@@ -127,10 +128,11 @@ describe("ChatContext", () => {
       await ctx!.send("你好", []);
     });
 
-    // 代理模式：chatProxy 被调用，附带 provider 参数
+    // 代理模式：chatProxy 被调用，附带 provider 参数与 abort signal
     expect(api.chatProxy).toHaveBeenCalledWith(
       "conv1", "你好", "text", "sk-test-key",
       { api_format: "openai", base_url: "https://api.openai.com/v1", model: "gpt-4o" },
+      expect.any(AbortSignal),
     );
     expect(streamProxied).toHaveBeenCalled();
     // 流结束后用服务端状态刷新
@@ -196,5 +198,71 @@ describe("ChatContext", () => {
       ctx!.selectModel({ provider: "openai", model: "gpt-4o" });
     });
     expect(ctx?.activeModel).toEqual({ provider: "openai", model: "gpt-4o" });
+  });
+
+  it("从未选过模型时自动选中第一个可用模型", async () => {
+    vi.mocked(loadActiveModel).mockReturnValue(null);
+    render(<ChatProvider><Probe /></ChatProvider>);
+    await waitFor(() => expect(ctx?.conversations).toHaveLength(1));
+    expect(ctx?.activeModel).toEqual({ provider: "openai", model: "gpt-4o" });
+  });
+
+  it("stop() 中断直连流式：不抛错，保存已收到的部分", async () => {
+    const s = providerState();
+    s.openai.requestMode = "direct";
+    vi.mocked(loadProviders).mockReturnValue(s);
+    // streamDirect 模拟：吐出部分文本后因 abort 中断
+    vi.mocked(streamDirect).mockImplementation(async (_cfg, _key, _sp, _h, ev: any) => {
+      ev.onText("部分");
+      const err = new DOMException("aborted", "AbortError");
+      throw err;
+    });
+    vi.mocked(api.messages).mockResolvedValue({ items: [], has_more: false } as any);
+    render(<ChatProvider><Probe /></ChatProvider>);
+    await waitFor(() => expect(ctx?.conversations).toHaveLength(1));
+    await act(async () => { ctx!.selectConversation("conv1"); });
+
+    const sendP = act(async () => { await ctx!.send("你好", []); });
+    // 等待流式开始后中断
+    await act(async () => { ctx!.stop(); });
+    await sendP;
+
+    // 不抛错，且部分回复已落库
+    const asstCalls = vi.mocked(api.postMessage).mock.calls.filter((c) => c[1].role === "assistant");
+    expect(asstCalls).toHaveLength(1);
+    expect(asstCalls[0][1].content).toBe("部分");
+    expect(asstCalls[0][1].model).toBe("gpt-4o");
+  });
+
+  it("editAndResend：更新消息、删除其后消息、重新生成", async () => {
+    vi.mocked(api.patchMessage).mockResolvedValue({ ok: true });
+    const s = providerState();
+    s.openai.requestMode = "direct";
+    vi.mocked(loadProviders).mockReturnValue(s);
+    vi.mocked(streamDirect).mockImplementation(async (_c, _k, _sp, _h, ev: any) => {
+      ev.onText("新回复");
+      return { text: "新回复", input: null, output: null };
+    });
+    const oldMsgs = [
+      { id: 1, role: "user", content_type: "text", content: "旧问题", tokens_in: null, tokens_out: null, created_at: "" },
+      { id: 2, role: "assistant", content_type: "text", content: "旧回答", tokens_in: null, tokens_out: null, created_at: "" },
+    ];
+    vi.mocked(api.messages).mockResolvedValue({ items: oldMsgs, has_more: false } as any);
+    render(<ChatProvider><Probe /></ChatProvider>);
+    await waitFor(() => expect(ctx?.conversations).toHaveLength(1));
+    await act(async () => { ctx!.selectConversation("conv1"); });
+    await waitFor(() => expect(ctx?.messages).toHaveLength(2));
+
+    await act(async () => { await ctx!.editAndResend(1, "新问题", []); });
+
+    // 后端：更新消息 1 并删除其后
+    expect(api.patchMessage).toHaveBeenCalledWith("conv1", 1, "新问题", "text");
+    // 重新生成：history 以编辑后的用户消息结尾
+    const histArg = vi.mocked(streamDirect).mock.calls[0][3] as any[];
+    expect(histArg).toHaveLength(1);
+    expect(histArg[0].parts[0].text).toBe("新问题");
+    // resend 不重复落库用户消息，只写助手消息
+    const userCalls = vi.mocked(api.postMessage).mock.calls.filter((c) => c[1].role === "user");
+    expect(userCalls).toHaveLength(0);
   });
 });

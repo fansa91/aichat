@@ -59,14 +59,14 @@ async function loadHistory(pool: Pool, conversationId: string): Promise<HistoryI
 
 async function persistAssistant(
   pool: Pool, conversationId: string, content: string,
-  tokensIn: number | null, tokensOut: number | null
+  tokensIn: number | null, tokensOut: number | null, model: string | null
 ): Promise<number> {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
     const [r] = await conn.query<any>(
-      "INSERT INTO messages (conversation_id, role, content_type, content, tokens_in, tokens_out) VALUES (?, 'assistant', 'text', ?, ?, ?)",
-      [conversationId, content, tokensIn, tokensOut]
+      "INSERT INTO messages (conversation_id, role, content_type, content, model, tokens_in, tokens_out) VALUES (?, 'assistant', 'text', ?, ?, ?, ?)",
+      [conversationId, content, model, tokensIn, tokensOut]
     );
     await conn.query("UPDATE conversations SET updated_at = NOW() WHERE id = ?", [conversationId]);
     await conn.commit();
@@ -300,7 +300,7 @@ export async function chatRoutes(app: FastifyInstance) {
 
     // 落库助手回复（即使流中断也保存已收到的部分）
     try {
-      const count = await persistAssistant(pool, conversationId, assistantText, tokensIn, tokensOut);
+      const count = await persistAssistant(pool, conversationId, assistantText, tokensIn, tokensOut, modelCfg.model);
       // 首轮标题自动生成（异步，不阻塞；测试可用 drainBackground 等待收敛）
       trackBackground(maybeGenerateTitle(pool, cfg, user.id, conversationId, modelCfg, apiKey, count));
     } catch (e: any) {

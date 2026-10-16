@@ -55,8 +55,15 @@ export const api = {
     req<{ items: Message[]; has_more: boolean }>(
       `/conversations/${convId}/messages?limit=${limit}${beforeId ? `&before_id=${beforeId}` : ""}`
     ),
-  postMessage: (convId: string, body: { role: string; content: string; content_type?: string }) =>
+  postMessage: (convId: string, body: { role: string; content: string; content_type?: string; model?: string }) =>
     req<Message>(`/conversations/${convId}/messages`, { method: "POST", body: JSON.stringify(body) }),
+
+  /** 编辑用户消息：更新内容并删除其后的所有消息（用于重新编辑发送） */
+  patchMessage: (convId: string, msgId: number, content: string, contentType: string) =>
+    req<{ ok: boolean }>(`/conversations/${convId}/messages/${msgId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ content, content_type: contentType }),
+    }),
 
   modelConfigs: () => req<{ items: ModelConfig[] }>("/model-configs"),
   createModelConfig: (body: Record<string, unknown>) =>
@@ -74,6 +81,7 @@ export const api = {
   chatProxy: (
     convId: string, content: string, contentType: string, modelApiKey?: string,
     provider?: { api_format: string; base_url: string; model: string },
+    signal?: AbortSignal,
   ) =>
     fetch(BASE + `/conversations/${convId}/chat`, {
       method: "POST",
@@ -83,6 +91,7 @@ export const api = {
         ...(modelApiKey ? { "x-model-api-key": modelApiKey } : {}),
       },
       body: JSON.stringify({ content, content_type: contentType, ...(provider ?? {}) }),
+      signal,
     }),
 
   /** 模型列表中转（后端直调上游，绕开浏览器 CORS 限制） */

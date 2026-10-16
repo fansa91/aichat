@@ -1,8 +1,9 @@
 import * as React from "react";
-import { Check, ChevronDown, Menu } from "lucide-react";
+import { ChevronDown, Menu } from "lucide-react";
 import { SessionSidebar } from "../components/SessionSidebar";
 import { MessageList } from "../components/MessageList";
 import { ChatInput } from "../components/ChatInput";
+import { ModelPickerDialog } from "../components/ModelPickerDialog";
 import { SettingsPage } from "./SettingsPage";
 import { useChat } from "../context/ChatContext";
 import { providerName } from "../lib/providers";
@@ -11,10 +12,11 @@ import type { ActiveModel } from "../lib/providers";
 export function ChatPage() {
   const {
     activeId, messages, hasMore, loadingMsgs, streaming,
-    activeModel, selectModel, providers, keyMissing,
-    loadMore, send, stop,
+    activeModel, providers, keyMissing,
+    loadMore, send, editAndResend, stop,
   } = useChat();
   const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [sendError, setSendError] = React.useState("");
 
@@ -24,6 +26,15 @@ export function ChatPage() {
       await send(text, images);
     } catch (e) {
       setSendError(e instanceof Error ? e.message : "发送失败");
+    }
+  };
+
+  const handleEditResend = async (msgId: number, text: string) => {
+    setSendError("");
+    try {
+      await editAndResend(msgId, text, []);
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : "重新发送失败");
     }
   };
 
@@ -55,10 +66,9 @@ export function ChatPage() {
           >
             <Menu className="h-5 w-5" />
           </button>
-          <ModelSelector
+          <ModelSelectorButton
             activeModel={activeModel}
-            onSelect={selectModel}
-            onOpenSettings={() => setSettingsOpen(true)}
+            onOpen={() => setPickerOpen(true)}
           />
         </div>
         <MessageList
@@ -67,6 +77,7 @@ export function ChatPage() {
           loading={loadingMsgs}
           streaming={streaming}
           onLoadMore={loadMore}
+          onEditResend={handleEditResend}
         />
         {sendError && (
           <div className="border-t px-4 py-2 text-sm text-destructive">{sendError}</div>
@@ -85,83 +96,37 @@ export function ChatPage() {
         />
       </div>
       {settingsOpen && <SettingsPage onClose={() => setSettingsOpen(false)} />}
+      {pickerOpen && (
+        <ModelPickerDialog
+          onClose={() => setPickerOpen(false)}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+      )}
     </div>
   );
 }
 
-/** 按供应商分组的模型选择器 */
-function ModelSelector({ activeModel, onSelect, onOpenSettings }: {
+/** 顶栏模型选择按钮，点击弹出选择面板 */
+function ModelSelectorButton({ activeModel, onOpen }: {
   activeModel: ActiveModel | null;
-  onSelect: (m: ActiveModel) => void;
-  onOpenSettings: () => void;
+  onOpen: () => void;
 }) {
   const { providers } = useChat();
-  const [open, setOpen] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
-
-  const groups = Object.values(providers)
-    .filter((p) => p.enabled)
-    .map((p) => ({
-      meta: p,
-      models: p.models.filter((m) => m.enabled).map((m) => ({ provider: p.id, model: m.id })),
-    }))
-    .filter((g) => g.models.length > 0);
-
   return (
-    <div ref={ref} className="relative min-w-0">
-      <button
-        className="flex max-w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium hover:bg-accent"
-        onClick={() => setOpen((v) => !v)}
-      >
-        {activeModel ? (
-          <>
-            <span className="shrink-0 text-muted-foreground">{providerName(providers, activeModel.provider)}</span>
-            <span className="truncate">{activeModel.model}</span>
-          </>
-        ) : (
-          <span className="text-muted-foreground">选择模型</span>
-        )}
-        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 max-h-80 w-64 overflow-y-auto rounded-lg border bg-card p-1 shadow-lg">
-          {groups.map((g) => (
-            <div key={g.meta.id}>
-              <div className="px-2 py-1 text-xs font-medium text-muted-foreground">{g.meta.name}</div>
-              {g.models.map((m) => {
-                const cur = activeModel?.provider === m.provider && activeModel?.model === m.model;
-                return (
-                  <button
-                    key={`${m.provider}/${m.model}`}
-                    className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent ${cur ? "bg-accent" : ""}`}
-                    onClick={() => { onSelect(m); setOpen(false); }}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{m.model}</span>
-                    {cur && <Check className="h-4 w-4 shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-          {groups.length === 0 && (
-            <div className="px-2 py-4 text-center text-sm text-muted-foreground">暂无可用模型</div>
-          )}
-          <div className="mt-1 border-t pt-1">
-            <button
-              className="flex w-full items-center rounded px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent"
-              onClick={() => { setOpen(false); onOpenSettings(); }}
-            >
-              管理模型配置…
-            </button>
-          </div>
-        </div>
+    <button
+      onClick={onOpen}
+      className="flex min-w-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm hover:bg-accent"
+      title="选择模型"
+    >
+      {activeModel ? (
+        <>
+          <span className="shrink-0 text-muted-foreground">{providerName(providers, activeModel.provider)}</span>
+          <span className="truncate">{activeModel.model}</span>
+        </>
+      ) : (
+        <span className="text-muted-foreground">选择模型</span>
       )}
-    </div>
+      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+    </button>
   );
 }

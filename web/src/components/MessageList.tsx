@@ -10,11 +10,13 @@ interface Props {
   loading: boolean;
   streaming: boolean;
   onLoadMore: () => void;
+  onEditResend: (msgId: number, text: string) => void;
 }
 
-export function MessageList({ messages, hasMore, loading, streaming, onLoadMore }: Props) {
+export function MessageList({ messages, hasMore, loading, streaming, onLoadMore, onEditResend }: Props) {
   const ref = React.useRef<HTMLDivElement>(null);
   const stickRef = React.useRef(true);
+  const [editingId, setEditingId] = React.useState<number | null>(null);
 
   const onScroll = () => {
     const el = ref.current;
@@ -51,7 +53,18 @@ export function MessageList({ messages, hasMore, loading, streaming, onLoadMore 
         </div>
       )}
       {messages.map((m) => (
-        <ChatMessage key={m.id} message={m} />
+        <ChatMessage
+          key={m.id}
+          message={m}
+          editing={editingId === m.id}
+          streaming={streaming}
+          onStartEdit={() => setEditingId(m.id)}
+          onCancelEdit={() => setEditingId(null)}
+          onSaveEdit={(text) => {
+            setEditingId(null);
+            onEditResend(m.id, text);
+          }}
+        />
       ))}
       {messages.length === 0 && !loading && (
         <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

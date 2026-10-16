@@ -9,13 +9,13 @@ let app: FastifyInstance;
 test.before(async () => { app = await setupApp(); });
 test.after(async () => { await teardownApp(app); });
 
-test("迁移：001+002+003 按序应用且幂等", async () => {
+test("迁移：001+002+003+004 按序应用且幂等", async () => {
   const applied = await runMigrations(testConfig());
   assert.deepEqual(applied, [], "重复执行不应重复应用");
   const [rows] = await app.pool.query<RowDataPacket[]>(
     "SELECT version FROM schema_migrations ORDER BY version"
   );
-  assert.deepEqual(rows.map((r) => r.version), ["001", "002", "003"]);
+  assert.deepEqual(rows.map((r) => r.version), ["001", "002", "003", "004"]);
 });
 
 test("迁移：表结构完整", async () => {
