@@ -81,7 +81,8 @@ function builtinDefaults(): ProviderState {
       apiKey: "",
       baseUrl: b.defaultBaseUrl,
       requestMode: "direct",
-      models: b.defaultModels.map((id) => ({ id, enabled: true, custom: false })),
+      // 模型列表只展示用户主动选择添加的模型，不预置默认值
+      models: [],
     };
   }
   return s;

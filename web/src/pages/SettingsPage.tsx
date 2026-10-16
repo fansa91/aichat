@@ -367,14 +367,12 @@ function ProviderDetail({ provider, initial, onChanged }: {
               />
               <span className="min-w-0 flex-1 truncate text-sm">{m.id}</span>
               {m.custom && <Badge variant="outline">自定义</Badge>}
-              {m.custom && (
-                <Button
-                  variant="ghost" size="icon" title="删除"
-                  onClick={() => persist({ ...s, models: s.models.filter((x) => x.id !== m.id) })}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              )}
+              <Button
+                variant="ghost" size="icon" title="删除"
+                onClick={() => persist({ ...s, models: s.models.filter((x) => x.id !== m.id) })}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
             </div>
           ))}
         </div>

@@ -9,21 +9,22 @@ import * as modelClient from "./modelClient";
 describe("providers", () => {
   beforeEach(() => { localStorage.clear(); });
 
-  it("默认只有 OpenAI 启用，三个内置供应商", () => {
+  it("默认只有 OpenAI 启用，三个内置供应商，模型列表为空（仅展示用户添加的）", () => {
     const s = loadProviders();
     expect(Object.keys(s)).toHaveLength(3);
     expect(s.openai.enabled).toBe(true);
     expect(s.anthropic.enabled).toBe(false);
     expect(s.openai.apiFormat).toBe("openai");
     expect(s.anthropic.apiFormat).toBe("anthropic");
-    expect(s.openai.models.length).toBeGreaterThan(0);
+    expect(s.openai.models).toEqual([]);
+    expect(s.anthropic.models).toEqual([]);
   });
 
   it("save/load 往返", () => {
     const s = loadProviders();
     s.anthropic.enabled = true;
     s.anthropic.apiKey = "sk-ant-test-key";
-    s.anthropic.models[0].enabled = false;
+    s.anthropic.models = [{ id: "claude-x", enabled: false, custom: false }];
     s.openai.models.push({ id: "my-custom", enabled: true, custom: true });
     saveProviders(s);
     const s2 = loadProviders();
@@ -56,11 +57,18 @@ describe("providers", () => {
 
   it("enabledModels 只返回启用项", () => {
     const s = loadProviders();
+    s.openai.models = [
+      { id: "m1", enabled: true, custom: false },
+      { id: "m2", enabled: true, custom: false },
+    ];
     s.anthropic.enabled = true;
-    s.anthropic.models[0].enabled = false;
+    s.anthropic.models = [
+      { id: "a1", enabled: true, custom: false },
+      { id: "a2", enabled: false, custom: false },
+    ];
     const list = enabledModels(s);
-    expect(list.filter((m) => m.provider === "anthropic")).toHaveLength(s.anthropic.models.length - 1);
-    expect(list.filter((m) => m.provider === "openai")).toHaveLength(s.openai.models.length);
+    expect(list.filter((m) => m.provider === "anthropic")).toHaveLength(1);
+    expect(list.filter((m) => m.provider === "openai")).toHaveLength(2);
     expect(list.every((m) => m.provider !== "gemini")).toBe(true);
   });
 
@@ -156,12 +164,18 @@ describe("providers", () => {
 
   it("loadActiveModel / saveActiveModel", () => {
     const s = loadProviders();
-    expect(loadActiveModel(s)).toEqual({ provider: "openai", model: s.openai.models[0].id });
-    saveActiveModel({ provider: "openai", model: s.openai.models[2].id });
-    expect(loadActiveModel(s)).toEqual({ provider: "openai", model: s.openai.models[2].id });
+    s.openai.models = [
+      { id: "m1", enabled: true, custom: false },
+      { id: "m2", enabled: true, custom: false },
+      { id: "m3", enabled: true, custom: false },
+    ];
+    saveProviders(s);
+    expect(loadActiveModel(s)).toEqual({ provider: "openai", model: "m1" });
+    saveActiveModel({ provider: "openai", model: "m3" });
+    expect(loadActiveModel(s)).toEqual({ provider: "openai", model: "m3" });
     s.openai.models[2].enabled = false;
     saveProviders(s);
-    expect(loadActiveModel(s)?.model).not.toBe(s.openai.models[2].id);
+    expect(loadActiveModel(s)?.model).not.toBe("m3");
   });
 
   it("BUILTINS 保持三个", () => {
